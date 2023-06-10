@@ -12,38 +12,25 @@ void indexPage(clientContext *client , reqData *req){
 }
 
 
-int handleRequest(httpServer* server ,clientContext *client){
-    bool fatal_error = False;
-
-    reqData * req = readAndParseRequest(server,client);    
-
-    if(fatal_error){
-        closeConnection(server , client);
-        return 0;
-    }
-
-    if(req == NULL){
-        closeConnection(server , client);
-        return 1;
-    }
-    handleResource(server , client , req);
-    free(req);
-    return 1;
-}
 
 int main(int argc , char**argv){
     httpServer *server = newHttpServer();
+
     if(!server){
         printf("Unable to Create Socket\n");
         return 0;
     }
+    
     
     //Define or Load Resources
     serverGet(server , "/" , Resource_TYPE_DYNAMIC , indexPage);
     serverGet(server , "/static" , Resource_TYPE_STATIC , "Hello World");
     serverAll(server , "/all" , Resource_TYPE_STATIC , "all Methods supported");
 
+    //Server Settings
     server->port = 8000;
+    server->is_debug = True;
+
     if(!serverBind(server)){
         //printf("Bind Error\n");
         return 1;
@@ -52,13 +39,12 @@ int main(int argc , char**argv){
         //printf("Listen Error\n");
         return 1;
     }
-    
-    
+
     debug(server);
 
     while(True){
         clientContext *client = acceptConnection(server);
-        int hcode = handleRequest(server , client);
+        int hcode = handleClient(server , client);
         if(!hcode){
             break;
         }

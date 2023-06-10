@@ -202,7 +202,6 @@ int deserializeHttpRequest(char *asciiData , reqData *req){
         return 0;
     }
 
-    printf("Request(%s , %s , headers=%d ,http_subver=%d)\n" , method , path , req->headers->length , subver);
     char *hst = headerGetValue(req->headers, "Host");
     if(hst != NULL){
         //printf("Host: %s" , headerGetValue(req->headers , "Host"));
@@ -480,10 +479,10 @@ typedef struct ResourceStruct {
 } Resource;
 
 Resource *newResource(){
-    Resource *resource = malloc(sizeof(struct ResourceStruct));
+    Resource *resource =(Resource*)malloc(sizeof(struct ResourceStruct));
     resource->id = -1;
     resource->type = Resource_TYPE_STATIC;
-    resource->static_content = malloc(32);
+    resource->static_content = (char*)malloc(32);
     strcpy(resource->path , "/default");
     strcpy(resource->method , "all");
     strcpy(resource->static_content , "Empty Resource");
@@ -497,6 +496,7 @@ typedef struct httpServerStruct{
     int port;
     char host[256];
     struct sockaddr_in *addr;
+    int is_debug;
     int is_bound;
     int is_listening;
     int clients_connected; //Mainly For Multithreaded use 
@@ -606,6 +606,10 @@ reqData *readAndParseRequest(httpServer *server , clientContext *client){
     reqData *req = newRequestData();
     req->headers = newHeaderData();
     int parsingStatus = deserializeHttpRequest(buffer , req);
+    
+    if(server->is_debug){
+        printf("Request(%s , %s , headers=%d)\n" , req->method , req->path , req->headers->length);
+    }
 
     if(!parsingStatus){
         closeConnection(server , client);
@@ -620,7 +624,7 @@ reqData *readAndParseRequest(httpServer *server , clientContext *client){
 int sendResponse(clientContext *client , resData * res){
 
 
-    char *response = malloc(1024*18); //Heap Buffer Moment     
+    char *response =(char*)malloc(1024*18); //Heap Buffer Moment     
     serializeHttpResponse(response , res); 
     if(!writeHttpResponse(client , response)){
         free(response);
@@ -641,8 +645,12 @@ resData *makeHttpResponse(char * content , int status){
 }
 
 void debug(httpServer *server){
+    if(!server->is_debug){
+        return;
+    }
     printf("Http server Listening on port %d\n" , server->port);
     printf("http://localhost:%d/\n", server->port);
+    
 }
 
 void serverGet(httpServer * server , char *path , int type , void *resource_data){
@@ -653,16 +661,16 @@ void serverGet(httpServer * server , char *path , int type , void *resource_data
     resource->type = type;
 
     if(type == Resource_TYPE_STATIC){
-        resource->static_content = malloc(strlen(resource_data)+1);
-        strcpy(resource->static_content , resource_data);
+        resource->static_content = (char*)malloc(strlen((char*)resource_data)+1);
+        strcpy(resource->static_content , (char*)resource_data);
     }
 
     if(type == Resource_TYPE_DYNAMIC){
-        resource->dynamic = resource_data;
+        resource->dynamic = (void(*)(clientContext* , reqData*))resource_data;
     }
     if(type == Resource_TYPE_FILE){
-        resource->local_path = malloc(strlen(resource_data)+1);
-        strcpy(resource->local_path , resource_data);
+        resource->local_path = (char*)malloc(strlen((char*)resource_data)+1);
+        strcpy(resource->local_path , (char*)resource_data);
     }
     server->resources[resource->id] = resource;
     server->resource_count++;
@@ -676,16 +684,16 @@ void serverPost(httpServer * server , char *path , int type , void *resource_dat
     resource->type = type;
 
     if(type == Resource_TYPE_STATIC){
-        resource->static_content = malloc(strlen(resource_data)+1);
-        strcpy(resource->static_content , resource_data);
+        resource->static_content = (char*)malloc(strlen((char*)resource_data)+1);
+        strcpy(resource->static_content , (char*)resource_data);
     }
 
     if(type == Resource_TYPE_DYNAMIC){
-        resource->dynamic = resource_data;
+        resource->dynamic = (void(*)(clientContext* , reqData*))resource_data;
     }
     if(type == Resource_TYPE_FILE){
-        resource->local_path = malloc(strlen(resource_data)+1);
-        strcpy(resource->local_path , resource_data);
+        resource->local_path = (char*)malloc(strlen((char*)resource_data)+1);
+        strcpy(resource->local_path , (char*)resource_data);
     }
     server->resources[resource->id] = resource;
     server->resource_count++;
@@ -699,16 +707,16 @@ void serverAll(httpServer * server , char *path , int type , void *resource_data
     resource->type = type;
 
     if(type == Resource_TYPE_STATIC){
-        resource->static_content = malloc(strlen(resource_data)+1);
-        strcpy(resource->static_content , resource_data);
+        resource->static_content = (char*)malloc(strlen((char*)resource_data)+1);
+        strcpy(resource->static_content , (char*)resource_data);
     }
 
     if(type == Resource_TYPE_DYNAMIC){
-        resource->dynamic = resource_data;
+        resource->dynamic = (void(*)(clientContext* , reqData*))resource_data;
     }
     if(type == Resource_TYPE_FILE){
-        resource->local_path = malloc(strlen(resource_data)+1);
-        strcpy(resource->local_path , resource_data);
+        resource->local_path = (char*)malloc(strlen((char*)resource_data)+1);
+        strcpy(resource->local_path , (char*)resource_data);
     }
     server->resources[resource->id] = resource;
     server->resource_count++;
@@ -767,6 +775,23 @@ void handleResource(httpServer *server , clientContext *client , reqData *req){
     respondNotFound(server , client , req);
     return;
 
+}
+
+int handleClient(httpServer* server ,clientContext *client){
+    bool fatal_error = False;
+    reqData * req = readAndParseRequest(server,client);
+    if(fatal_error){
+        closeConnection(server , client);
+        return 0;
+    }
+
+    if(req == NULL){
+        closeConnection(server , client);
+        return 1;
+    }
+    handleResource(server , client , req);
+    free(req);
+    return 1;
 }
 
 
