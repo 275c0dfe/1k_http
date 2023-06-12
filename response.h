@@ -1,5 +1,6 @@
 #include "string.h"
 #include "ext_types.h"
+
 //Response Parsing
 typedef struct responseDataStruct
 {

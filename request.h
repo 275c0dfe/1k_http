@@ -1,6 +1,7 @@
 #include "string.h"
 #include "ext_types.h"
 
+
 //Request Parsing
 typedef struct requestDataStruct{
     char path[500];

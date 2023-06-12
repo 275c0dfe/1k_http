@@ -3,9 +3,11 @@
 #include "arpa/inet.h"
 #include "stdio.h"
 #include "unistd.h"
+//#include "ext_types.h"
 
-#include "request.h"
 #include "response.h"
+#include "request.h"
+
 
 #define Resource_TYPE_STATIC 0
 #define Resource_TYPE_DYNAMIC 1
@@ -227,6 +229,15 @@ resData *makeHttpResponse(char *content, int status)
     return res;
 }
 
+void serverFinishAndSendResponse(httpServer *server , clientContext *client , resData *res){
+    headerAddValue(res->headers, "Connection", "Close");
+    headerAddValue(res->headers, "Server", "chttp");
+    serverSendResponse(client, res);
+    free(res);
+    serverCloseConnectionHandler(server, client);
+    return;
+}
+
 void serverDebug(httpServer *server)
 {
     server->is_debug = True;
@@ -313,10 +324,10 @@ void serverAll(httpServer *server, char *path, int type, void *resource_data)
     server->resource_count++;
 }
 
-void serverRespondNotFound(httpServer *server, clientContext *client, reqData *req)
+void serverRespondNotFound(httpServer *server, clientContext *client, reqData *req , void *info)
 {
     char formatBuffer[256];
-    sprintf(formatBuffer, "<html><head><title>Resource Not Found</title></head> <body><h1>Resource <span>\"%s\"</span> not found.</h1></body></html>", req->path);
+    sprintf(formatBuffer, "<html><head><title>Resource Not Found</title></head> <body><h1>Resource <span>\"%s\"</span> not found.</h1> <p>INFO:%s</p> </body></html>", req->path , info);
     resData *res = makeHttpResponse(formatBuffer, 404);
     headerAddValue(res->headers, "Connection", "Close");
     headerAddValue(res->headers, "Server", "chttp");
@@ -349,18 +360,14 @@ void serverHandleResource(httpServer *server, clientContext *client, reqData *re
 
     if (resource == NULL)
     {
-        serverRespondNotFound(server, client, req);
+        serverRespondNotFound(server, client, req , NULL);
         return;
     }
 
     if (resource->type == Resource_TYPE_STATIC)
     {
         resData *res = makeHttpResponse(resource->static_content, 200);
-        headerAddValue(res->headers, "Connection", "Close");
-        headerAddValue(res->headers, "Server", "chttp");
-        serverSendResponse(client, res);
-        free(res);
-        serverCloseConnectionHandler(server, client);
+        serverFinishAndSendResponse(server , client , res);
         return;
     }
 
@@ -376,21 +383,31 @@ void serverHandleResource(httpServer *server, clientContext *client, reqData *re
         FILE *f = fopen(resource->local_path, "r");
         if (!f)
         {
-            serverRespondNotFound(server, client, req);
+            serverRespondNotFound(server, client, req , "No File Handle");
             return;
         }
-        char *file_buffer = (char *)malloc(1024 * 12);
-        int bytes_read = fread(file_buffer, (size_t)(1024 * 12), 1, f);
-        if (bytes_read < 1)
-        {
-            serverRespondNotFound(server, client, req);
-            return;
-        }
+        
+        fseek(f, 0, SEEK_END);
+        long fsize = ftell(f);
+        fseek(f, 0, SEEK_SET);
 
+        if(fsize > 1024*12){
+            serverRespondNotFound(server ,client , req , "File Bigger Than Max Buffer");
+            return;
+        }
+        
+        char *file_buffer = malloc(fsize + 1);
+        fread(file_buffer, fsize, 1, f);
+        fclose(f);
+        file_buffer[fsize] = 0;
+        
         resData *res = makeHttpResponse(file_buffer, 200);
+        serverFinishAndSendResponse(server , client , res);
+        free(file_buffer);
+        return;
     }
 
-    serverRespondNotFound(server, client, req);
+    serverRespondNotFound(server, client, req , NULL);
     return;
 }
 
@@ -413,3 +430,4 @@ int serverHandleClient(httpServer *server, clientContext *client)
     free(req);
     return 1;
 }
+
