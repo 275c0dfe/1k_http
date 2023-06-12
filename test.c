@@ -8,7 +8,7 @@
 
 void indexPage(clientContext *client , reqData *req){
     resData *res = makeHttpResponse("<html> <body> <h1>Home</h1><code>Hello World</code></body></html>" , 200);
-    sendResponse(client , res);
+    serverSendResponse(client , res);
 }
 
 
@@ -40,11 +40,11 @@ int main(int argc , char**argv){
         return 1;
     }
 
-    debug(server);
+    serverDebug(server);
 
     while(True){
         clientContext *client = acceptConnection(server);
-        int hcode = handleClient(server , client);
+        int hcode = serverHandleClient(server , client);
         if(!hcode){
             break;
         }

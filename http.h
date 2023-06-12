@@ -6,9 +6,13 @@
 #include "unistd.h"
 #include "netinet/in.h"
 #include "arpa/inet.h"
-#include "url.h"
 #include "stdio.h"
+
+
+//Made By Me
+#include "url.h"
 #include "ext_types.h"
+#include "request.h"
 
 
 #define STATUS_OK 200
@@ -21,199 +25,7 @@
 #define Resource_TYPE_FILE 2
 
 
-//Header Struct (Just a dictionary)
-typedef struct headerDataStruct
-{
-    char keys[32][32];
-    char values[32][128];
-    int length;
-} headerData;
 
-headerData *newHeaderData()
-{
-    return (headerData *)malloc(sizeof(struct headerDataStruct));
-}
-
-void headerAddValue(headerData *data, char *key, char *value)
-{
-    if (strlen(key) > 32)
-    {
-        // printf("Key Too BIG \n");
-        return;
-    }
-
-    for (int i = 0; i < data->length; i++)
-    {
-        if (strcmp(data->keys[i], key) == 0)
-        {
-            // printf("Entry Already Exists\n");
-            return;
-        }
-    }
-
-    if (strlen(value) > 64)
-    {
-        // printf("Value Too Big\n");
-        return;
-    }
-    strcpy(data->keys[data->length], key);
-    strcpy(data->values[data->length], value);
-    data->length++;
-    // printf("\r\n%d\r\n" , data->length);
-}
-
-void headerSetValue(headerData *data, char *key, char *value)
-{
-    int entryIndex = -1;
-    for (int i = 0; i < data->length; i++)
-    {
-        if (strcmp(data->keys[i], key) == 0)
-        {
-            entryIndex = i;
-            break;
-        }
-    }
-    strcpy(data->values[entryIndex], value);
-}
-
-char *headerGetValue(headerData *data, char *key)
-{
-    int entryIndex = -1;
-    for (int i = 0; i < data->length; i++)
-    {
-        if (strcmp(data->keys[i], key) == 0)
-        {
-            entryIndex = i;
-            break;
-        }
-    }
-    if(entryIndex == -1){
-        return NULL;
-    }
-    return data->values[entryIndex];
-}
-
-void headersToText(headerData *data, char *headerBuff)
-{
-    strcpy(headerBuff , "\0\0\0\0");
-    for (int i = 0; i < data->length; i++)
-    {
-        char *key = data->keys[i];
-        char *value = data->values[i];
-        char buff[96] = {0};
-        sprintf(buff, "%s: %s\r\n", key, value);
-        strcat(headerBuff, buff);
-    }
-}
-
-void headersFromText(headerData *data, char headerLines[33][512])
-{
-    for(int i =1;i < 33;i++){
-        char *CurrentLine = headerLines[i];
-        //printf("%d\r\n" , strlen(CurrentLine));
-        if(strlen(CurrentLine) == 0){
-            break;
-        }
-        char *key = strtok(CurrentLine , ": ");
-        char *val = strtok(NULL , ": ");
-        //printf("Header: %s:%s\r\n" , key, val);
-        headerAddValue(data, key, val);
-    }
-}
-
-
-//Request Parsing
-typedef struct requestDataStruct{
-    char path[500];
-    char method[8];
-    headerData *headers;
-    char body[1024*12];
-} reqData;
-
-reqData *newRequestData(){
-    reqData *req = (reqData*)malloc(sizeof(struct requestDataStruct));
-    strcpy(req->path , "/");
-    strcpy(req->method , "GET");
-    return req;
-}
-
-int deserializeHttpRequest(char *asciiData , reqData *req){
-    char lines[33][512] = {0};
-    char body[1024*8] = {0};
-    char InternalBuffer[1024 * 22] = {0};
-    strcpy(InternalBuffer , asciiData);
-
-    //Ripped Straight From parseHttpResponse
-    int line_count = 0;
-    int index = 0;
-    int sections = 0;
-    char *token = strtok(InternalBuffer, "\n");
-    while (token != NULL)
-    {
-        //printf("%d : %s\r\n", index, token);
-        // for(int i =0; i<strlen(token); i++){
-        //     printf("%d " , token[i]);
-        // }
-        // printf("\r\n");
-        if (strcmp(token, "\r") == 0)
-        {
-            //printf("SECTION\r\n");
-            sections += 1;
-        }
-        else
-        {
-            if (sections == 0)
-            {
-                // Headers And Res Code
-                strcat(lines[index], token);
-                line_count++;
-            }
-            if (sections > 0)
-            {
-                //Parse Body
-                strcat(body, token);
-                strcat(body, "\r\n");
-            }
-        }
-        index++;
-        token = strtok(NULL, "\n");
-    }
-    /*
-    for(int i =0;i<line_count;i++){
-        char *line = lines[i];
-        
-        printf("%d : %s\n" , i , line);
-    }*/
-    char line0[512] = {0};
-    strcpy(line0 , lines[0]);
-    //printf("%s\n" , line0);
-    
-    headersFromText(req->headers , lines);
-    
-    //printf("Headers Parsed: %d\n" , req->headers->length);
-    char path[500] = {0};
-    char method[8] = {0};
-    int subver = 1;
-
-    sscanf(line0 , "%s %s HTTP/1.1" , method , path);
-    
-    if(strcmp(line0 , "") == 0){
-        //printf("Empty Request\n");
-        return 0;
-    }
-
-    char *hst = headerGetValue(req->headers, "Host");
-    if(hst != NULL){
-        //printf("Host: %s" , headerGetValue(req->headers , "Host"));
-    }
-    strcpy(req->path , path);
-    strcpy(req->method , method);
-    strcpy(req->body , body);
-
-    
-    return 1;
-
-}
 
 //Response Parsing
 typedef struct responseDataStruct
@@ -571,13 +383,13 @@ clientContext *acceptConnection(httpServer *server){
     return cli;
 }
 
-void closeConnection(httpServer *server , clientContext *client){
+void serverCloseConnectionHandler(httpServer *server , clientContext *client){
     close(client->socket);
     server->clients_connected--;
     return;
 }
 
-bool readHttpRequest(httpServer *server , clientContext *client, char *buffer){
+bool serverReadHttpRequest(httpServer *server , clientContext *client, char *buffer){
     char InternalBuffer[1024*20] = {0}; //20 kb max request size 
     int bytes_recieved = recv(client->socket , InternalBuffer, sizeof(InternalBuffer), 0);
     if(bytes_recieved == -1){
@@ -588,7 +400,7 @@ bool readHttpRequest(httpServer *server , clientContext *client, char *buffer){
     return True;
 }
 
-bool writeHttpResponse(clientContext *client, char *buffer){
+bool serverWriteHttpResponse(clientContext *client, char *buffer){
     char InternalBuffer[1024*20] = {0}; //20 kb Response Buffer
     strcpy(InternalBuffer , buffer);
     int sent = send(client->socket , InternalBuffer , strlen(InternalBuffer) , 0);
@@ -599,9 +411,9 @@ bool writeHttpResponse(clientContext *client, char *buffer){
     return True;
 }
 
-reqData *readAndParseRequest(httpServer *server , clientContext *client){
+reqData *serverReadAndParseRequest(httpServer *server , clientContext *client){
     char *buffer = (char *)malloc(1024*21); 
-    readHttpRequest(server , client , buffer);
+    serverReadHttpRequest(server , client , buffer);
 
     reqData *req = newRequestData();
     req->headers = newHeaderData();
@@ -612,7 +424,7 @@ reqData *readAndParseRequest(httpServer *server , clientContext *client){
     }
 
     if(!parsingStatus){
-        closeConnection(server , client);
+        serverCloseConnectionHandler(server , client);
         return NULL;
     }
     
@@ -621,12 +433,12 @@ reqData *readAndParseRequest(httpServer *server , clientContext *client){
     return req;
 }
 
-int sendResponse(clientContext *client , resData * res){
+int serverSendResponse(clientContext *client , resData * res){
 
 
     char *response =(char*)malloc(1024*18); //Heap Buffer Moment     
     serializeHttpResponse(response , res); 
-    if(!writeHttpResponse(client , response)){
+    if(!serverWriteHttpResponse(client , response)){
         free(response);
         return False;
     }
@@ -644,7 +456,7 @@ resData *makeHttpResponse(char * content , int status){
     return res;
 }
 
-void debug(httpServer *server){
+void serverDebug(httpServer *server){
     if(!server->is_debug){
         return;
     }
@@ -722,19 +534,19 @@ void serverAll(httpServer * server , char *path , int type , void *resource_data
     server->resource_count++;
 }
 
-void respondNotFound(httpServer *server , clientContext *client , reqData*req){
+void serverRespondNotFound(httpServer *server , clientContext *client , reqData*req){
     char formatBuffer[256];
     sprintf(formatBuffer , "<html><head><title>Resource Not Found</title></head> <body><h1>Resource <span>\"%s\"</span> not found.</h1></body></html>" , req->path);
     resData *res = makeHttpResponse(formatBuffer , 404);
     headerAddValue(res->headers , "Connection" , "Close");
     headerAddValue(res->headers , "Server" , "chttp");
-    sendResponse(client , res);
-    closeConnection(server ,client);
+    serverSendResponse(client , res);
+    serverCloseConnectionHandler(server ,client);
     free(res);
     return;
 }
 
-void handleResource(httpServer *server , clientContext *client , reqData *req){
+void serverHandleResource(httpServer *server , clientContext *client , reqData *req){
     Resource *resource = NULL;
     for(int i =0; i<server->resource_count; i++){
         resource = server->resources[i];
@@ -752,7 +564,7 @@ void handleResource(httpServer *server , clientContext *client , reqData *req){
     }
 
     if(resource == NULL){
-        respondNotFound(server ,client , req);
+        serverRespondNotFound(server ,client , req);
         return;
     }
 
@@ -760,38 +572,56 @@ void handleResource(httpServer *server , clientContext *client , reqData *req){
         resData *res = makeHttpResponse(resource->static_content , 200);
         headerAddValue(res->headers , "Connection" , "Close");
         headerAddValue(res->headers , "Server" , "chttp");
-        sendResponse(client , res);
+        serverSendResponse(client , res);
         free(res);
-        closeConnection(server ,client);
+        serverCloseConnectionHandler(server ,client);
         return;
     }
 
     if(resource->type == Resource_TYPE_DYNAMIC){
         resource->dynamic(client , req);
-        closeConnection(server ,client);
+        serverCloseConnectionHandler(server ,client);
         return;
     }
 
-    respondNotFound(server , client , req);
+    if(resource->type == Resource_TYPE_FILE){
+        FILE *f = fopen(resource->local_path , "r");
+        if(!f){
+            serverRespondNotFound(server , client ,req);
+            return;
+        }
+        char *file_buffer = (char *)malloc(1024*12);
+        int bytes_read = fread(file_buffer , (size_t)(1024*12) , 1 , f);
+        if(bytes_read < 1){
+            serverRespondNotFound(server , client , req);
+            return;
+        }
+
+        resData *res = makeHttpResponse(file_buffer , 200);
+
+    }
+
+    serverRespondNotFound(server , client , req);
     return;
 
 }
 
-int handleClient(httpServer* server ,clientContext *client){
+int serverHandleClient(httpServer* server ,clientContext *client){
     bool fatal_error = False;
-    reqData * req = readAndParseRequest(server,client);
+    reqData * req = serverReadAndParseRequest(server,client);
     if(fatal_error){
-        closeConnection(server , client);
+        serverCloseConnectionHandler(server , client);
         return 0;
     }
 
     if(req == NULL){
-        closeConnection(server , client);
+        serverCloseConnectionHandler(server , client);
         return 1;
     }
-    handleResource(server , client , req);
+    serverHandleResource(server , client , req);
     free(req);
     return 1;
 }
+
 
 
