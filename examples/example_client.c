@@ -1,7 +1,7 @@
 #include "http_client.h"
 
 int main(int argc , char **argv){
-    httpClient *client = newHttpClient("http://localhost:8000/static");
+    httpClient *client = newHttpClient("http://example.com/");
     if(!clientConnect(client)){
         printf("Failed To Connect To Host\n");
         return 1;

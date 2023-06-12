@@ -4,6 +4,9 @@
 #include "netinet/in.h"
 #include "netdb.h"
 #include "ext_types.h"
+#include "stdio.h"
+#include "unistd.h"
+#include "string.h"
 
 
 #include "request.h"
@@ -100,7 +103,7 @@ int clientWrite(httpClient *client, char *buffer)
     }
 }
 
-resData *httpGetRequest(httpClient *client, char *data, headerData *headers)
+resData *httpGetRequest(httpClient *client, headerData *headers)
 {
     if (headers == NULL)
     {
@@ -136,14 +139,15 @@ resData *httpGetRequest(httpClient *client, char *data, headerData *headers)
     int dsize = clientRead(client, InBuffer);
     if (dsize < 0)
     {
-        // printf("Error Receiving Data\r\n");
+        //printf("Error Receiving Data\r\n");
+        dsize = clientRead(client , InBuffer);
     }
     resData *req = newResponseData();
     req->headers = newHeaderData();
     deserializeHttpResponse(InBuffer, req);
 
-
-    // printf("Data Recieved: %d Bytes\r\n", dsize);
+    //printf("%s\n", InBuffer);
+    //printf("Data Recieved: %d Bytes\r\n", dsize);
 
     return req;
 }
