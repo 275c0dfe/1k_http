@@ -1,4 +1,4 @@
-#include "http.h"
+#include "http_server.h"
 
 
 //Dynamic resource function required steps
@@ -24,6 +24,7 @@ int main(int argc , char**argv){
     
     //Define or Load Resources
     serverGet(server , "/" , Resource_TYPE_DYNAMIC , indexPage);
+    serverGet(server , "/index" , Resource_TYPE_FILE , "index.html");
     serverGet(server , "/static" , Resource_TYPE_STATIC , "Hello World");
     serverAll(server , "/all" , Resource_TYPE_STATIC , "all Methods supported");
 

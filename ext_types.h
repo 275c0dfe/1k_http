@@ -4,6 +4,12 @@
 #define True 1
 #define False 0
 
+#define STATUS_OK 200
+#define STATUS_BAD_REQUEST 400
+#define STATUS_NOT_FOUND 404
+#define STATUS_SERVER_ERROR 500
+
+
 //Slow Data Struct
 typedef struct dictionaryDataStruct
 {
