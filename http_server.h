@@ -33,6 +33,7 @@ typedef struct ResourceStruct
     int type;
     char *local_path;
     char *static_content;
+    headerData *headers;
     void (*dynamic)(clientContext *, reqData *);
 } Resource;
 
@@ -45,6 +46,7 @@ Resource *newResource()
     strcpy(resource->path, "/default");
     strcpy(resource->method, "all");
     strcpy(resource->static_content, "Empty Resource");
+    resource->headers = NULL;
     return resource;
 }
 
@@ -155,22 +157,22 @@ void serverCloseConnectionHandler(httpServer *server, clientContext *client)
 
 bool serverReadHttpRequest(httpServer *server, clientContext *client, char *buffer)
 {
-    char InternalBuffer[1024 * 20] = {0}; // 20 kb max request size
-    int bytes_recieved = recv(client->socket, InternalBuffer, sizeof(InternalBuffer), 0);
+    char *InternalBuffer = calloc(60*1024, 1); // 60 kb max request size
+    int bytes_recieved = recv(client->socket, InternalBuffer, 60*1024, 0);
     if (bytes_recieved == -1)
     {
         printf("Error During Reading Request\n");
         return False;
     }
     strcpy(buffer, InternalBuffer);
+    //printf("\n%s\n\n" , buffer);
     return True;
 }
 
-bool serverWriteHttpResponse(clientContext *client, char *buffer)
+bool serverWriteHttpResponse(clientContext *client, char *buffer , long buffer_size)
 {
-    char InternalBuffer[1024 * 20] = {0}; // 20 kb Response Buffer
-    strcpy(InternalBuffer, buffer);
-    int sent = send(client->socket, InternalBuffer, strlen(InternalBuffer), 0);
+    
+    int sent = send(client->socket, buffer, buffer_size, 0);
     if (sent == -1)
     {
         printf("Error Sending Response\n");
@@ -181,7 +183,7 @@ bool serverWriteHttpResponse(clientContext *client, char *buffer)
 
 reqData *serverReadAndParseRequest(httpServer *server, clientContext *client)
 {
-    char *buffer = (char *)malloc(1024 * 21);
+    char *buffer = (char *)calloc(1024 * 60 +1 , 1);
     serverReadHttpRequest(server, client, buffer);
 
     reqData *req = newRequestData();
@@ -190,7 +192,7 @@ reqData *serverReadAndParseRequest(httpServer *server, clientContext *client)
 
     if (server->is_debug)
     {
-        printf("Request(%s , %s , headers=%d)\n", req->method, req->path, req->headers->length);
+        printf("Request(%s , %s , headers=%d , len=%d)\n", req->method, req->path, req->headers->length, strlen(buffer));
     }
 
     if (!parsingStatus)
@@ -206,10 +208,18 @@ reqData *serverReadAndParseRequest(httpServer *server, clientContext *client)
 
 int serverSendResponse(clientContext *client, resData *res)
 {
-
-    char *response = (char *)malloc(1024 * 18); // Heap Buffer Moment
-    serializeHttpResponse(response, res);
-    if (!serverWriteHttpResponse(client, response))
+    long body_length = strlen(res->body);
+    if(headerGetValue(res->headers , "Content-Length")){
+        long content_length = 0;
+        char content_length_value[16] = {0};
+        strcpy(content_length_value , headerGetValue(res->headers, "Content-Length"));
+        sscanf(content_length_value , "%ld"  , &content_length);
+        body_length = content_length;
+    }
+    char *response = (char *)calloc(1024 * 4 + body_length , 1); // Heap Buffer Moment
+    long res_size = serializeHttpResponse(response, res);
+    printf("->%ld\n" , res_size);
+    if (!serverWriteHttpResponse(client, response , res_size+1))
     {
         free(response);
         return False;
@@ -224,6 +234,7 @@ resData *makeHttpResponse(char *content, int status)
     resData *res = newResponseData();
     res->headers = newHeaderData();
     res->status = status;
+    res->body = calloc(strlen(content)+1 , 1);
 
     strcpy(res->body, content);
     return res;
@@ -243,7 +254,7 @@ void serverDebug(httpServer *server)
     server->is_debug = True;
 }
 
-void serverGet(httpServer *server, char *path, int type, void *resource_data)
+void serverGet(httpServer *server, char *path, int type, void *resource_data , headerData *headers)
 {
     Resource *resource = newResource();
     resource->id = server->resource_count;
@@ -266,11 +277,14 @@ void serverGet(httpServer *server, char *path, int type, void *resource_data)
         resource->local_path = (char *)malloc(strlen((char *)resource_data) + 1);
         strcpy(resource->local_path, (char *)resource_data);
     }
+    if(headers != NULL){
+        resource->headers = headers;
+    }
     server->resources[resource->id] = resource;
     server->resource_count++;
 }
 
-void serverPost(httpServer *server, char *path, int type, void *resource_data)
+void serverPost(httpServer *server, char *path, int type, void *resource_data , headerData *headers)
 {
     Resource *resource = newResource();
     resource->id = server->resource_count;
@@ -293,11 +307,14 @@ void serverPost(httpServer *server, char *path, int type, void *resource_data)
         resource->local_path = (char *)malloc(strlen((char *)resource_data) + 1);
         strcpy(resource->local_path, (char *)resource_data);
     }
+    if(headers != NULL){
+        resource->headers = headers;
+    }
     server->resources[resource->id] = resource;
     server->resource_count++;
 }
 
-void serverAll(httpServer *server, char *path, int type, void *resource_data)
+void serverAll(httpServer *server, char *path, int type, void *resource_data , headerData *headers)
 {
     Resource *resource = newResource();
     resource->id = server->resource_count;
@@ -319,6 +336,9 @@ void serverAll(httpServer *server, char *path, int type, void *resource_data)
     {
         resource->local_path = (char *)malloc(strlen((char *)resource_data) + 1);
         strcpy(resource->local_path, (char *)resource_data);
+    }
+    if(headers != NULL){
+        resource->headers = headers;
     }
     server->resources[resource->id] = resource;
     server->resource_count++;
@@ -360,13 +380,18 @@ void serverHandleResource(httpServer *server, clientContext *client, reqData *re
 
     if (resource == NULL)
     {
-        serverRespondNotFound(server, client, req , NULL);
+        serverRespondNotFound(server, client, req , "Resource Not Found");
         return;
     }
 
     if (resource->type == Resource_TYPE_STATIC)
     {
         resData *res = makeHttpResponse(resource->static_content, 200);
+        if(resource->headers != NULL){
+            for(int i =0; i< resource->headers->length;i++){
+                headerAddValue(res->headers , resource->headers->keys[i], resource->headers->values[i]);
+            }
+        }
         serverFinishAndSendResponse(server , client , res);
         return;
     }
@@ -380,7 +405,7 @@ void serverHandleResource(httpServer *server, clientContext *client, reqData *re
 
     if (resource->type == Resource_TYPE_FILE)
     {
-        FILE *f = fopen(resource->local_path, "r");
+        FILE *f = fopen(resource->local_path, "rb");
         if (!f)
         {
             serverRespondNotFound(server, client, req , "No File Handle");
@@ -391,17 +416,27 @@ void serverHandleResource(httpServer *server, clientContext *client, reqData *re
         long fsize = ftell(f);
         fseek(f, 0, SEEK_SET);
 
-        if(fsize > 1024*12){
-            serverRespondNotFound(server ,client , req , "File Bigger Than Max Buffer");
-            return;
-        }
+        
         
         char *file_buffer = malloc(fsize + 1);
         fread(file_buffer, fsize, 1, f);
         fclose(f);
         file_buffer[fsize] = 0;
         
-        resData *res = makeHttpResponse(file_buffer, 200);
+        resData *res = makeHttpResponse("", 200);
+        res->body = calloc(fsize+1 , 1);
+        for(int i =0;i<fsize; i++){
+            res->body[i] = file_buffer[i];
+        }
+        if(resource->headers != NULL){
+            for(int i =0; i< resource->headers->length;i++){
+                headerAddValue(res->headers , resource->headers->keys[i], resource->headers->values[i]);
+            }
+        }
+
+        char contentLengthValue[16];
+        sprintf(contentLengthValue,  "%ld" , fsize);
+        headerAddValue(res->headers , "Content-Length" , contentLengthValue);
         serverFinishAndSendResponse(server , client , res);
         free(file_buffer);
         return;
@@ -429,5 +464,12 @@ int serverHandleClient(httpServer *server, clientContext *client)
     serverHandleResource(server, client, req);
     free(req);
     return 1;
+}
+
+resData* redirect(char * path){
+    resData *res = makeHttpResponse("" , 302);
+    headerAddValue(res->headers , "location" , path);
+    headerAddValue(res->headers , "Connection" , "Close");
+    return res;
 }
 

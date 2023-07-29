@@ -6,15 +6,17 @@ typedef struct responseDataStruct
 {
     int status;
     headerData *headers;
-    char body[1024 * 12];
+    char *body;
 } resData;
 
 resData *newResponseData()
 {
-    return (resData *)malloc(sizeof(struct responseDataStruct));
+    resData *res = (resData *)malloc(sizeof(struct responseDataStruct));
+    res->body = calloc(30*1024, 1);
+    return res;
 }
 
-void serializeHttpResponse(char *response, resData *res)
+long serializeHttpResponse(char *response, resData *res)
 {
 
     // Get Correct Text Code
@@ -45,14 +47,29 @@ void serializeHttpResponse(char *response, resData *res)
     strcat(response, headers);
     // Body
     strcat(response, "\r\n");
-    strcat(response, res->body);
+    if(headerGetValue(res->headers , "Content-Length")){
+        long content_length = 0;
+        char content_length_value[16] = {0};
+        strcpy(content_length_value , headerGetValue(res->headers, "Content-Length"));
+        sscanf(content_length_value , "%ld"  , &content_length);
+        int base = strlen(response);
+        for(int i=0; i<content_length;i++){
+            response[base + i] = res->body[i];
+        }
+        response[base+content_length+1] = 0;
+        free(headers);
+        return base + content_length;
+    }
+    else{
+        strcat(response, res->body);
+    }
     free(headers);
-    return;
+    return strlen(response);
 }
 
 int deserializeHttpResponse(char *asciiData, resData *res)
 {
-    char InternalBuffer[1024 * 18] = {0};
+    char *InternalBuffer = calloc(strlen(asciiData+1) , 1);
     strcpy(InternalBuffer, asciiData);
 
     char headerLines[33][512] = {0};

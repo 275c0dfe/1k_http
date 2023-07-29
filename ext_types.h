@@ -94,7 +94,7 @@ typedef struct headerDataStruct
 
 headerData *newHeaderData()
 {
-    return (headerData *)malloc(sizeof(struct headerDataStruct));
+    return (headerData *)calloc(1, sizeof(struct headerDataStruct));
 }
 
 void headerAddValue(headerData *data, char *key, char *value)
@@ -107,6 +107,7 @@ void headerAddValue(headerData *data, char *key, char *value)
 
     for (int i = 0; i < data->length; i++)
     {
+        //printf("%s , %s\n" , data->keys[i] , key);
         if (strcmp(data->keys[i], key) == 0)
         {
             // printf("Entry Already Exists\n");
