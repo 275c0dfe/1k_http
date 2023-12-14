@@ -1,3 +1,5 @@
+#ifndef _REQUEST_HTTP_H
+#define _REQUEST_HTTP_H
 #include "string.h"
 #include "ext_types.h"
 
@@ -94,3 +96,4 @@ int deserializeHttpRequest(char *asciiData , reqData *req){
     return 1;
 
 }
+#endif

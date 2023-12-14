@@ -1,4 +1,4 @@
-#include "http_client.h"
+#include "http.h"
 
 int main(int argc , char **argv){
     httpClient *client = newHttpClient("http://localhost:8000/static");

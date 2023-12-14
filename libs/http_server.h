@@ -1,3 +1,5 @@
+#ifndef _HTTP_SERVER_H
+#define _HTTP_SERVER_H
 #include "sys/socket.h"
 #include "sys/types.h"
 #include "arpa/inet.h"
@@ -392,6 +394,11 @@ void serverHandleResource(httpServer *server, clientContext *client, reqData *re
                 headerAddValue(res->headers , resource->headers->keys[i], resource->headers->values[i]);
             }
         }
+
+        char contentLengthValue[16];
+        sprintf(contentLengthValue,  "%d" , strlen(resource->static_content));
+        headerAddValue(res->headers , "Content-Length" , contentLengthValue);
+
         serverFinishAndSendResponse(server , client , res);
         return;
     }
@@ -473,3 +480,4 @@ resData* redirect(char * path){
     return res;
 }
 
+#endif

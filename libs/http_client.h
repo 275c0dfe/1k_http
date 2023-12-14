@@ -1,3 +1,6 @@
+#ifndef _HTTP_CLIENT_H
+#define _HTTP_CLIENT_H
+
 #include "sys/socket.h"
 #include "sys/types.h"
 #include "arpa/inet.h"
@@ -151,3 +154,4 @@ resData *httpGetRequest(httpClient *client, headerData *headers)
 
     return req;
 }
+#endif //_HTTP_CLIENT_H

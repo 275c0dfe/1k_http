@@ -1,3 +1,5 @@
+#ifndef _RESPONSE_HTTP_H
+#define _RESPONSE_HTTP_H
 #include "string.h"
 #include "ext_types.h"
 
@@ -124,3 +126,4 @@ int deserializeHttpResponse(char *asciiData, resData *res)
 
     return 1;
 }
+#endif

@@ -1,3 +1,5 @@
+#ifndef _URL_HTTP_H
+#define _URL_HTTP_H
 #include "string.h"
 #include "stdlib.h"
 #include "ctype.h"
@@ -11,6 +13,8 @@ typedef struct UrlDataStruct
 } UrlData;
 
 
+// Made by Beyondo on stackoverflow
+// https://stackoverflow.com/a/51906794
 typedef struct URLINFOStruct
 {
     const char* protocol;
@@ -58,7 +62,7 @@ URL_INFO* split_url(URL_INFO* info, const char* url)
     else 
     {
         char* path = strstr(URL + 8, "/");
-        info->path = path ? path : "/";
+        info->path = path ? path : "/"; ;//Gross Inline If
     }
     int r = strcmp(info->protocol, info->site) == 0;
     if (r && info->port == "80")
@@ -67,3 +71,4 @@ URL_INFO* split_url(URL_INFO* info, const char* url)
         info->protocol = "tcp";
     return info;
 }
+#endif
