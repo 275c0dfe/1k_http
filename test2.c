@@ -7,7 +7,7 @@
 
 
 void indexPage(clientContext *client , reqData *req){
-    resData *res = makeHttpResponse("<html> <body> <h1>Home</h1><code>Hello World</code></body></html>" , 200);
+    resData *res = makeHttpResponse("<html> <body> <h1>Home</h1><code>Hello World</code></body></html>" , 200 , client);
     headerAddValue(res->headers , "Connection" , "Close");
     headerAddValue(res->headers , "Server" , "Idk");
     serverSendResponse(client , res);
